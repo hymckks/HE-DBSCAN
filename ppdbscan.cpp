@@ -26,17 +26,21 @@ class EncryptedInputRecord      //为每个数据记录创建一个对象来存�
 
 };
 
-//读文件
-vector<EncryptedInputRecord> openFile(const char* dataset){
-	fstream file;
-	file.open(dataset,ios::in);    //dataset在main函数中指定文件名
-	if(!file) 
+//读文件，分别将数据的x坐标与y坐标读入两个向量中
+void openFile(const char* dataset, vector<double> &x0, vector<double> &y0){
+	fstream infile;
+	infile.open(dataset,ios::in);    //dataset在main函数中指定文件名
+	if(!infile) 
     {
         cout <<"Open File Failed!" <<endl;
     } 
+    
 
-	file.close();
+
+
+	infile.close();
 	cout<<"successful!"<<endl;
+    return;
 }
 
 //部分并行化距离计算（二维点,n为输入数据规模,xy没有引用不会影响本来的值）
@@ -55,6 +59,7 @@ void ppSEDcalculation(Ctxt x, Ctxt y, Ctxt e, int n,PubKey publicKey,vector<Ctxt
         //将得到的sed与e^2进行比较，小于则在dist[i][j]存1
         Ctxt result = sed;
         result -= e;
+	    
         for(int j = 0;j < n;j ++)//if result[i] > 0 l;dist[i][j] = 0;else dist[i][j] = 1;
         {
             if(check())            //如何判断
@@ -109,12 +114,12 @@ int main(int argc, char* argv[])
     
 
     //读入文件
+    vector<double> x0(N), y0(N);
      = openFile("Lsun.txt");
     vector<Ctxt> nx(N);  //n copies of x[i]
     vector<Ctxt> ny(N);
 
     //坐标向量的密文形式
-    vector<double> x0(N), y0(N);
     PtxtArray x1(context,x0),y1(context,y0);
     Ctxt x(publicKey),y(publicKey);
     x1.encrypt(x);
