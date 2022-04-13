@@ -1,3 +1,15 @@
+#include <iostream>
+#include <vector>
+#include <cstdio>
+#include <cstring>
+#include <cmath>
+#include <ctime>
+#include <fstream>
+#include <algorithm>
+#include <helib/helib.h>
+using namespace std;
+using namespace helib;
+
 //-----------------------------=优化空间：本项目仅仅展示了二维点数据，其维度可以拓展--------------------------------------------------
 
 int N = 400;            //数据规模
