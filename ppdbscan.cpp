@@ -14,8 +14,10 @@ using namespace helib;
 
 //-----------------------------=优化空间：本项目仅仅展示了二维点数据，其维度可以拓展--------------------------------------------------
 
-const int N = 5;            //数据规模
-vector<vector<double>> dist;   //全局变量，存放距离判断结果
+const int N = 6;            //数据规模
+vector<vector<double>> dist(N, vector<double>(N));   //全局变量，存放距离判断结果
+vector<vector<double>> ncopyx;
+vector<vector<double>> ncopyy;    //存放拷贝
 
 class EncryptedInputRecord      //为每个数据记录创建一个对象来存储其属性值
 {
@@ -37,68 +39,86 @@ void openFile(const char* dataset, vector<double> &x0, vector<double> &y0){
     } 
     
     string temp,ycut;
+    int i;
     while(getline(infile,temp))
     {
        x0.push_back(stod(temp));
+       vector<double> xx(N,stod(temp));
        int split = temp.find(';',0) + 1;
        ycut = temp.substr(split);
        y0.push_back(stod(ycut));
+       vector<double> yy(N,stod(ycut));
+       ncopyx.push_back(xx);
+       ncopyy.push_back(yy);
     }
 	infile.close();
-	cout<<"successful!"<<endl;
+	cout<<" ===========Reading the dataset successful!!======"<<endl;
     return;
 }
 
-//密文比较，把它交给数据拥有者来做，只返回大小
-bool check(Ctxt result)
-{
-   return true;
-}
-
 //返回该Ctxt变量的第i个数的n份拷贝
-Ctxt ncopy(int k,Ctxt c,Context &context) //0 <= i <= n-1
-{
-    // Ctxt c1 = c;
-    // rotate(c1,-k);//将c左移i个slot (c[0], ..., example:c[n-1]) = (c[1], c[2], ..., c[n-1], c[0])
+// Ctxt ncopy(int k,Ctxt c,Context &context) //0 <= i <= n-1
+// {
+//     Ctxt c1 = c;
+//     rotate(c1,-k);//将c左移i个slot (c[0], ..., example:c[n-1]) = (c[1], c[2], ..., c[n-1], c[0])
     
-    // vector<double> v(N);
-    // v[0] = 1;
-    // PtxtArray pp(context,v);
-    // c1 *= pp;        //c 0 0 0 0 0 0 0 
-    // Ctxt res = c1;
+//     vector<double> v(N);
+//     v[0] = 1;
+//     PtxtArray pp(context,v);
+//     c1 *= pp;        //c 0 0 0 0 0 0 0 
+//     Ctxt res = c1;
 
-    // for(int j = 1;j < N;j ++)
-    // {
-    //     //cout << "===============" << j << endl;
-    //     //rotate(c1,1);
-    //     res += c;
-    // }
-    // return res;
-    return c;
-}
+//     for(int j = 1;j < N;j ++)
+//     {
+//         //cout << "===============" << j << endl;
+//         //rotate(c1,1);
+//         res += c;
+//     }
+//     return res;
+//     return c;
+// }
 
-//部分并行化距离计算（二维点,n为输入数据规模,xy没有引用不会影响本来的值）
-void ppSEDcalculation(Ctxt x, Ctxt y, Ctxt e,Context &context)
+//密文比较，把它交给数据拥有者来做，只返回大小
+void check(Ctxt sed,double e,SecKey secretKey,Context &context,int i)
 {
-    e *= e;//SED
+    vector<double> d;
+    vector<double> v;
+    PtxtArray p(context); 
+    p.decrypt(sed,secretKey);
+    p.store(v);
+    e *= e;
+
     for(int i = 0;i < N;i ++)
     {
-        Ctxt nx = ncopy(i,x,context);
-        Ctxt ny = ncopy(i,y,context);
-        
+        if(v[i] <= e) d.push_back(1);
+        else d.push_back(0);
+    }
+    dist[i].assign(d.begin(),d.end());
+}
+
+//部分并行化距离计算（二维点,n为输入数据规模,xy没有引用不会影响本来的值）  //在通信过程中不会将知晓参数私钥
+void ppSEDcalculation(Ctxt x, Ctxt y,double e, Context &context,vector<Ctxt> nx,vector<Ctxt> ny, SecKey secretKey)
+{
+    cout << "================= starting to calculate!! ====================" << endl;
+    //e *= e;//SED e^2
+    cout << "dist : " << endl;
+    for(int i = 0;i < N;i ++)
+    {   
         Ctxt sedx = x; Ctxt sedy = y;
-        sedx -= nx; sedx *= sedx;     //(x - xi)^2
-        sedy -= ny; sedy *= sedy;;
+        sedx -= nx[i]; sedx *= sedx;     //(x - xi)^2
+        sedy -= ny[i]; sedy *= sedy;;
         Ctxt sed = sedx;
         sed += sedy;   //(x - x0) ^ 2 + (y - y0) ^ 2
 
         //将得到的sed与e^2进行比较，小于则在dist[i][j]存1
-        Ctxt result = sed;
-        result -= e;
+        check(sed,e, secretKey,context,i);
 
-        //密文比较
-        check(result);
-        cout << "we are now in" << i << endl;
+        //查看一下距离计算的结果
+        for(int j = 0;j < N;j ++)
+        {
+            cout << dist[i][j] << ' ';
+        }
+        cout << endl;
     }
     return ;
 }
@@ -118,7 +138,7 @@ void combineToSIMD(vector<EncryptedInputRecord> EncryptedElements,vector<double>
 }
 
 //将分割成SIMD的值合并
-void updateElements(vector<double> &sIsNoise, vector<double> &sNotProcessed,vector<EncryptedInputRecord> EncryptedElements)
+void updateElements(vector<double> sIsNoise, vector<double> sNotProcessed,vector<EncryptedInputRecord> &EncryptedElements)
 {
     int update = 0;
     for(EncryptedInputRecord elem : EncryptedElements)
@@ -132,11 +152,11 @@ void updateElements(vector<double> &sIsNoise, vector<double> &sNotProcessed,vect
 //隐私保护DBSCAN
 void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,Context &context)
 {
-    cout << "hello dbscan!!!" << endl;
+    cout << "========================= hello dbscan!!! ========================" << endl;
     int currentClusterID = 0;
-    int isCoreElement;
+    int isCoreElement = 0;
     for(EncryptedInputRecord &elem : EncryptedElements)     //引用条件稍微斟酌一下
-    {
+    {   
         //判断该点是否被处理过
         if(elem.notProcess)
         {
@@ -180,7 +200,7 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
             PtxtArray psIsNoise(context,sIsNoise);
             PtxtArray psNotProcessed(context,sNotProcessed);
             PtxtArray psValidNeighborhoodSize(context,sValidNeighborhoodSize);   //不变的
-            PtxtArray pneighbors(context,elem.neighbors);                        //不变的                               
+            PtxtArray pneighbors(context,elem.neighbors);                        //变的                               
             PtxtArray psNeighborsAreCoreElement(context);
             PtxtArray pkneighbors(context);
 
@@ -193,30 +213,32 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
             vector<double> sValidNeighbor;
             psValidNeighbor.store(sValidNeighbor);
 
-            if(accumulate(sValidNeighbor.begin(),sValidNeighbor.end(),0) != 0)
+            if(accumulate(sValidNeighbor.begin(),sValidNeighbor.end(),0) >= 1)
             {   
                 //存在满足条件的邻居，将满足条件的邻居的notprocessed 与isnoise置为0（将点的validNeighbor为1的置为0）,以及对应ID
                 psNotProcessed.store(sNotProcessed);
                 psIsNoise.store(sIsNoise);
-                for(int ii = 0;ii < N;ii ++)
+                for(int j = 0;j < N;j ++)
                 {
-                    if(sValidNeighbor[ii] != 0) 
+                    if(sValidNeighbor[j] >= 1) 
                     {
-                        sNotProcessed[ii] = 0;
-                        sIsNoise[ii] = 0;
-                        sClusterIDs[ii] = currentClusterID;                    
+                        sNotProcessed[j] = 0;
+                        sIsNoise[j] = 0;
+                        sClusterIDs[j] = currentClusterID;                    
                     }
                 }  
                 psNotProcessed.load(sNotProcessed);
                 psIsNoise.load(sIsNoise);
 
+                psValidNeighbor.load(sValidNeighbor);
                 //找出既是邻居又同时是核心点的点
                 psNeighborsAreCoreElement = psValidNeighbor;
                 psNeighborsAreCoreElement *= psValidNeighborhoodSize;
             }
             else 
             {
-                psNeighborsAreCoreElement.load(0);
+                vector<double> v(N,0);
+                psNeighborsAreCoreElement.load(v);
             }
 
             //如果邻居本身也是核心点，则把邻居的邻居也加入进来
@@ -230,7 +252,7 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
                     //ORTREE操作
                     vector <double>sUpdateResultDistanceComp;
                     psUpdateResultDistanceComp.store(sUpdateResultDistanceComp);
-                    if(accumulate(sValidNeighbor.begin(),sValidNeighbor.end(),0) != 0)
+                    if(accumulate(sValidNeighbor.begin(),sValidNeighbor.end(),0) >= 1)
                     {
                         pkneighbors += psUpdateResultDistanceComp;
                     }
@@ -242,6 +264,7 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
             psNotProcessed.store(sNotProcessed);
             updateElements(sIsNoise, sNotProcessed, EncryptedElements);
         }
+        
         //更新ClusterIDs
         int update = 0;
         for(EncryptedInputRecord elem : EncryptedElements)
@@ -249,9 +272,8 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
             elem.clusterID = sClusterIDs[update];
             update++;
         }
-    }
-    currentClusterID += isCoreElement;
-
+        currentClusterID += isCoreElement;
+    }   
     return;
 }
 
@@ -266,13 +288,13 @@ int main(int argc, char* argv[])
 
     //读入文件
     vector<double> x0, y0;
-    openFile("Lsun.txt",x0,y0);
-    
+    openFile("points.txt",x0,y0);
+
     //参数读入
-    double minPts = 3;//参数1，邻居个数         以明文的形式和攒底给处理方
+    double minPts = 2;//参数1，邻居个数         以明文的形式和传递给处理方 //注意，包含了其本身应当减去1！！！！
     //cout << "please enter the minPts : ";
     //cin >> minPts;
-    double e = 0.2;//参数2，距离          数据拥有着持有，输入后进行加密操作
+    double e = 1.000001;//参数2，距离          数据拥有着持有，输入后进行加密操作  //存在误差，本身的邻域距离都是1
     //cout << "please enter the e : ";
     //cin >> e;
     
@@ -282,60 +304,74 @@ int main(int argc, char* argv[])
     x1.encrypt(x);
     y1.encrypt(y);
 
-    //参数e的密文的n个拷贝
-    vector<double> e0(N,e);
-    PtxtArray pe(context,e0);
-    Ctxt ce(publicKey);
-    pe.encrypt(ce);
+    //n份拷贝暴力算法
+    vector<Ctxt> nx, ny;
+    for(int i = 0;i < N;i ++)
+    {
+        PtxtArray xx(context,ncopyx[i]),yy(context,ncopyy[i]);
+        Ctxt nxx(publicKey),nyy(publicKey);
+        xx.encrypt(nxx);
+        yy.encrypt(nyy);
+        nx.push_back(nxx);
+        ny.push_back(nyy);
+    }
+
+    // //参数e的密文的n个拷贝
+    // vector<double> e0(N,e);
+    // PtxtArray pe(context,e0);
+    // Ctxt ce(publicKey);
+    // pe.encrypt(ce);
 //=================================================================================================================
     //距离计算
-    ppSEDcalculation(x, y, ce, context);
-    
-    cout << "done!==========" << endl;
+    ppSEDcalculation(x, y, e, context,nx,ny,secretKey);
+
     //对于每个输入的数据记录创建一个EncryptedInputRecord,并进行初始化
     vector<EncryptedInputRecord> EncryptedElements;
 
-    cout << "begin!!" << endl;
     for(int i = 0;i < N;i ++)
     {
-        EncryptedElements[i].clusterID = 0;
-        EncryptedElements[i].isNoise = 0;
-        EncryptedElements[i].notProcess = 1;
-        cout << "start create : " << i << endl;
-        for(int j = 0;i < N;j ++) EncryptedElements[i].neighbors.push_back(dist[i][j]);
-        
-        //计算邻居数目
-        double neighborcount = accumulate(EncryptedElements[i].neighbors.begin(),
-                                                    EncryptedElements[i].neighbors.end(),0);
-        if(neighborcount >= minPts) EncryptedElements[i].validNeighborhoodSize = 1;
-        else EncryptedElements[i].validNeighborhoodSize = 0;
-    }
+        EncryptedInputRecord Element;
+        Element.clusterID = 0;
+        Element.isNoise = 0;
+        Element.notProcess = 1;
+        Element.neighbors.assign(dist[i].begin(),dist[i].end()); //oh my god im gonna be mad
 
-    cout << "create success !!!!!!!!!!!" << endl;
+        //计算邻居数目
+        double neighborcount = accumulate(Element.neighbors.begin(),
+                                                Element.neighbors.end(),0);
+        if(neighborcount >= minPts) Element.validNeighborhoodSize = 1;
+        else Element.validNeighborhoodSize = 0;
+        EncryptedElements.push_back(Element);
+    }
+    
     //开始执行隐私保护DBSCAN协议
     Privacy_preserving_DBSCAN(EncryptedElements,context);//可能有点问题
 
     //归纳结果========================================================================================================
-    vector<int> resclusterID;
-    int duibi = EncryptedElements[0].clusterID;
-    resclusterID.push_back(EncryptedElements[0].clusterID);
-    for(int i = 1;i < EncryptedElements.size();i ++)
+    vector<double> resclusterID;
+    // int duibi = EncryptedElements[0].clusterID;
+    // resclusterID.push_back(EncryptedElements[0].clusterID);
+    // for(int i = 1;i < EncryptedElements.size();i ++)
+    // {
+    //     if(EncryptedElements[i].clusterID != duibi)
+    //     {
+    //         duibi = EncryptedElements[i].clusterID;
+    //         resclusterID.push_back(EncryptedElements[i].clusterID);
+    //     }
+    //     else
+    //         continue;
+    // }
+    for(int i = 0;i < N;i ++)
     {
-        if(EncryptedElements[i].clusterID != duibi)
-        {
-            duibi = EncryptedElements[i].clusterID;
-            resclusterID.push_back(EncryptedElements[i].clusterID);
-        }
-        else
-            continue;
+        cout << "ClusterID : " << EncryptedElements[i].clusterID << endl;
     }
-    int numcluster = resclusterID.size();//聚类的数量
-    cout << "the number of the cluster is : " << numcluster << endl;
+    // int numcluster = resclusterID.size();//聚类的数量
+    // cout << "the number of the cluster is : " << numcluster << endl;
     
     return 0;
 }
 
-//=====================推荐参数表=========================    
+//===================== 推荐参数表 =========================    
 /*       m	   bits	c
     	16384	119	2
     	32768	358	6
