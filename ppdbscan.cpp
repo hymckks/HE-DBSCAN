@@ -14,7 +14,7 @@ using namespace helib;
 
 //-----------------------------=优化空间：本项目仅仅展示了二维点数据，其维度可以拓展--------------------------------------------------
 
-const int N = 7;            //数据规模
+const int N = 6;            //数据规模
 vector<vector<double>> dist(N, vector<double>(N));   //全局变量，存放距离判断结果
 vector<vector<double>> ncopyx;
 vector<vector<double>> ncopyy;    //存放拷贝
@@ -296,7 +296,7 @@ int main(int argc, char* argv[])
     double minPts = 2;//参数1，邻居个数         以明文的形式和传递给处理方 //注意，包含了其本身应当减去1！！！！
     //cout << "please enter the minPts : ";
     //cin >> minPts;
-    double e = 1.000001;//参数2，距离          数据拥有着持有，输入后进行加密操作  //存在误差，本身的邻域距离都是1
+    double e = 3.000001;//参数2，距离          数据拥有着持有，输入后进行加密操作  //存在误差，本身的邻域距离都是1
     //cout << "please enter the e : ";
     //cin >> e;
     
