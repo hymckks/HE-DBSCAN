@@ -14,7 +14,7 @@ using namespace helib;
 
 //-----------------------------=优化空间：本项目仅仅展示了二维点数据，其维度可以拓展--------------------------------------------------
 
-const int N = 6;            //数据规模
+const int N = 7;            //数据规模
 vector<vector<double>> dist(N, vector<double>(N));   //全局变量，存放距离判断结果
 vector<vector<double>> ncopyx;
 vector<vector<double>> ncopyy;    //存放拷贝
@@ -52,7 +52,7 @@ void openFile(const char* dataset, vector<double> &x0, vector<double> &y0){
        ncopyy.push_back(yy);
     }
 	infile.close();
-	cout<<" ===========Reading the dataset successful!!======"<<endl;
+	cout<<"Reading the dataset successful!!"<<endl;
     return;
 }
 
@@ -141,10 +141,11 @@ void combineToSIMD(vector<EncryptedInputRecord> EncryptedElements,vector<double>
 void updateElements(vector<double> sIsNoise, vector<double> sNotProcessed,vector<EncryptedInputRecord> &EncryptedElements)
 {
     int update = 0;
-    for(EncryptedInputRecord elem : EncryptedElements)
+    for(EncryptedInputRecord &elem : EncryptedElements)
     {
         elem.isNoise = sIsNoise[update];
         elem.notProcess = sNotProcessed[update];
+        update ++;
     }
     return;
 }
@@ -182,7 +183,7 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
         vector<double> sIsCoreElement(N,isCoreElement);
         PtxtArray psIsCoreElement(context,sIsCoreElement);
 
-        int maxIterations = 4;     //根据论文的实验结果，几个数据集选取的最大迭代值为4，且结果正确
+        int maxIterations = 2;     //根据论文的实验结果，几个数据集选取的最大迭代值为4，且结果正确
 
         //用所有的EncryptedElements的各自的属性值来创建SIMD值
         vector<double> sClusterIDs;
@@ -224,7 +225,7 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
                     {
                         sNotProcessed[j] = 0;
                         sIsNoise[j] = 0;
-                        sClusterIDs[j] = currentClusterID;                    
+                        sClusterIDs[j] = currentClusterID;       
                     }
                 }  
                 psNotProcessed.load(sNotProcessed);
@@ -234,13 +235,14 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
                 //找出既是邻居又同时是核心点的点
                 psNeighborsAreCoreElement = psValidNeighbor;
                 psNeighborsAreCoreElement *= psValidNeighborhoodSize;
+
             }
             else 
             {
                 vector<double> v(N,0);
                 psNeighborsAreCoreElement.load(v);
             }
-
+           
             //如果邻居本身也是核心点，则把邻居的邻居也加入进来
             for(int k = 0;k < N;k ++)
             {
@@ -250,13 +252,12 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
                     psUpdateResultDistanceComp *= pkneighbors;
 
                     //ORTREE操作
-                    vector <double>sUpdateResultDistanceComp;
+                    vector<double> sUpdateResultDistanceComp;
                     psUpdateResultDistanceComp.store(sUpdateResultDistanceComp);
-                    if(accumulate(sValidNeighbor.begin(),sValidNeighbor.end(),0) >= 1)
+                    if(accumulate(sUpdateResultDistanceComp.begin(),sUpdateResultDistanceComp.end(),0) >= 1)
                     {
-                        pkneighbors += psUpdateResultDistanceComp;
+                        elem.neighbors[k] = 1;
                     }
-                    pkneighbors.store(EncryptedElements[k].neighbors);        //改变了邻居表的值
             }
 
             //将各SIMD值合并并更新所有的EncryptedInputRecord
@@ -267,13 +268,14 @@ void Privacy_preserving_DBSCAN(vector<EncryptedInputRecord> &EncryptedElements,C
         
         //更新ClusterIDs
         int update = 0;
-        for(EncryptedInputRecord elem : EncryptedElements)
+        for(EncryptedInputRecord &elem : EncryptedElements)
         {
-            elem.clusterID = sClusterIDs[update];
+            if(elem.isNoise == 1) elem.clusterID = -1;
+            else elem.clusterID = sClusterIDs[update];
             update++;
         }
         currentClusterID += isCoreElement;
-    }   
+    }  
     return;
 }
 
@@ -393,4 +395,5 @@ int main(int argc, char* argv[])
     	262144	2763	5
     	262144	2646	4
     	262144	2511	3
-    	262144	2234	2  */
+    	262144	2234	2  
+*/
