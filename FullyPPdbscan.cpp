@@ -332,7 +332,7 @@ bool checkORTREE(Ctxt a, Context &context,SecKey secretKey)
     for(int i = 0;i < N;i ++)
     {
         if(v1[i] < 0) v1[i] = -v1[i];
-        if(v1[i] >= 1) return true;
+        if(v1[i] >= 1) return 1;
         // if(v1[i] - v2[i] > 0)
         // {
         //     if(v1[i] - v2[i] <= 0.01) return true;
@@ -340,7 +340,7 @@ bool checkORTREE(Ctxt a, Context &context,SecKey secretKey)
         // else
         //     if(v2[i] - v1[i] <= 0.01) return true;
     }
-    return false;
+    return 0;
 }
 
 //纠正邻居矩阵
@@ -515,7 +515,7 @@ int main(int argc, char* argv[])
     SecKey secretKey(context);
     secretKey.GenSecKey();
     const PubKey &publicKey = secretKey;
-
+    HELIB_NTIMER_START(mul0);
     //读入文件
     vector<double> x0, y0;
     openFile("points.txt",x0,y0);
@@ -524,7 +524,7 @@ int main(int argc, char* argv[])
     double minPts = 2;//参数1，邻居个数         以明文的形式和传递给处理方 //注意，包含了其本身应当减去1！！！！
     //cout << "please enter the minPts : ";
     //cin >> minPts;
-    double e = 3.000001;//参数2，距离          数据拥有着持有，输入后进行加密操作  //存在误差，本身的邻域距离都是1
+    double e = 3.00001;//参数2，距离          数据拥有着持有，输入后进行加密操作  //存在误差，本身的邻域距离都是1
     //cout << "please enter the e : ";
     //cin >> e;
     
@@ -565,14 +565,14 @@ int main(int argc, char* argv[])
         vector <Ctxt> ck;
 
         Element.clusterID = 0;
-        vector<double> clusterID (N,0);
+        vector<double> clusterID (N,0.0001);
         PtxtArray pclusterID(context,clusterID);
         Ctxt cclusterID(publicKey);
         pclusterID.encrypt(cclusterID);
         ck.push_back(cclusterID);
 
         Element.isNoise = 0;
-        vector<double> isNoise(N,0);
+        vector<double> isNoise(N,0.0001);
         PtxtArray pisNoise(context,isNoise);
         Ctxt cisNoise(publicKey);
         pisNoise.encrypt(cisNoise);
@@ -604,12 +604,12 @@ int main(int argc, char* argv[])
     }
     
     //开始执行隐私保护DBSCAN协议
-    vector<double> currentClusterID(N,0);
+    vector<double> currentClusterID(N,0.0001);
     PtxtArray pcurrentClusterID(context,currentClusterID);
     Ctxt ccurrentClusterID(publicKey);
     pcurrentClusterID.encrypt(ccurrentClusterID);
     
-    vector<double> isCoreElement(N,0);
+    vector<double> isCoreElement(N,0.0001);
     PtxtArray pisCoreElement(context,isCoreElement);
     Ctxt cisCoreElement(publicKey);
     pisCoreElement.encrypt(cisCoreElement);
@@ -643,17 +643,24 @@ int main(int argc, char* argv[])
     //         continue;
     // }
     cout << endl;
+
+    ofstream fout;
+    fout.open("/home/heyiming/Desktop/PPDBSCAN/result.txt",ios::out);
+    fout << "clustering results : " << endl;
+
     for(int i = 0;i < N;i ++)
     {
         vector<double> resv;
         PtxtArray resp(context);
         resp.decrypt(cEncryptedElements[i][0],secretKey);
         resp.store(resv);
-        cout << "ClusterID : " << resv[i] << endl;
+        fout << "ClusterID : " << resv[i] << endl;
     }
+    fout.close();
     // int numcluster = resclusterID.size();//聚类的数量
     // cout << "the number of the cluster is : " << numcluster << endl;
-    
+    HELIB_NTIMER_STOP(mul0); // stops the time "mul0"
+    printNamedTimer(cout, "mul0");
     return 0;
 }
 
