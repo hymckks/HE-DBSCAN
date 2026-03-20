@@ -1,2 +1,2 @@
 # HE-DBSCAN
-My bachelor graduation design: Clustering of encrypted data using homomorphic encryption.(HElib/CKKS)
+My undergraduate capstone project focused on clustering encrypted data using homomorphic encryption (HElib/CKKS).
